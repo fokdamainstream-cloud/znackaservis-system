@@ -1,0 +1,10 @@
+{
+  "companies": [
+    {
+      "ico": "12345678",
+      "name": "Značka servis s.r.o.",
+      "city": "Bratislava",
+      "street": "Hlavná 123"
+    }
+  ]
+}

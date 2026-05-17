@@ -1,0 +1,252 @@
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { useUser } from '../context/UserContext';
+
+const fmt = (n) => (isNaN(parseFloat(n)) ? '—' : `${parseFloat(n).toFixed(2)} €`);
+
+function ItemModal({ item, onClose, onSave }) {
+  const isNew = !item?.id;
+  const [form, setForm] = useState({
+    name: item?.name || '',
+    sku: item?.sku || '',
+    description: item?.description || '',
+    quantity: item?.quantity ?? 0,
+    unit_price: item?.unit_price ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { setError('Zadajte názov'); return; }
+    if (form.unit_price === '' || isNaN(parseFloat(form.unit_price))) {
+      setError('Zadajte cenu');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        name: form.name.trim(),
+        sku: form.sku.trim(),
+        description: form.description,
+        quantity: parseFloat(form.quantity) || 0,
+        unit_price: parseFloat(form.unit_price),
+      };
+      if (isNew) {
+        await api.post('/items/', payload);
+      } else {
+        await api.patch(`/items/${item.id}/`, payload);
+      }
+      onSave();
+    } catch (err) {
+      setError(err.response?.data?.name?.[0] || err.response?.data?.detail || 'Chyba pri ukladaní');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 className="font-semibold text-gray-900 mb-4">
+          {isNew ? 'Nová položka' : 'Upraviť položku'}
+        </h3>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded mb-3">{error}</p>
+        )}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Názov *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => set('name', e.target.value)}
+                className="input"
+                placeholder="napr. Cestná zábrana"
+              />
+            </div>
+            <div>
+              <label className="label">Číslo položky (SKU)</label>
+              <input
+                type="text"
+                value={form.sku}
+                onChange={(e) => set('sku', e.target.value)}
+                className="input"
+                placeholder="napr. SKU-001"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">Popis</label>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              className="input"
+              placeholder="Voliteľný popis"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Množstvo na sklade</label>
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={form.quantity}
+                onChange={(e) => set('quantity', e.target.value)}
+                className="input text-right"
+              />
+            </div>
+            <div>
+              <label className="label">Cena bez DPH (€) *</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.unit_price}
+                onChange={(e) => set('unit_price', e.target.value)}
+                className="input text-right"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-5">
+          <button type="button" onClick={onClose} className="btn-secondary">Zrušiť</button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="btn-primary"
+          >
+            {saving ? 'Ukladám…' : 'Uložiť'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Items() {
+  const { isOwner } = useUser();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalItem, setModalItem] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get('/items/');
+      setItems(r.data.sort((a, b) => a.name.localeCompare(b.name, 'sk')));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = items.filter((i) =>
+    i.name.toLowerCase().includes(search.toLowerCase()) ||
+    (i.sku && i.sku.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const openNew = () => { setModalItem(null); setShowModal(true); };
+  const openEdit = (item) => { setModalItem(item); setShowModal(true); };
+  const handleSave = () => { setShowModal(false); load(); };
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-40 text-gray-400">Načítavam…</div>;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-semibold text-gray-900">Položky skladu</h1>
+        <button onClick={openNew} className="btn-primary">+ Nová položka</button>
+      </div>
+
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Hľadať položku…"
+          className="input max-w-xs"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="card p-12 text-center text-gray-400">
+          <p>Žiadne položky. Pridajte prvú položku.</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                  <th className="px-4 py-3 text-left font-medium">SKU</th>
+                  <th className="px-4 py-3 text-left font-medium">Názov</th>
+                  <th className="px-4 py-3 text-left font-medium">Popis</th>
+                  <th className="px-4 py-3 text-right font-medium">Na sklade</th>
+                  {isOwner && <th className="px-4 py-3 text-right font-medium">Cena bez DPH</th>}
+                  <th className="px-4 py-3 text-right font-medium">Akcie</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">{item.sku || '—'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{item.description || '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span
+                        className={`font-semibold ${
+                          item.quantity <= 0
+                            ? 'text-red-600'
+                            : item.quantity <= 5
+                            ? 'text-amber-600'
+                            : 'text-gray-900'
+                        }`}
+                      >
+                        {item.quantity}
+                      </span>
+                      <span className="text-gray-400 text-xs ml-1">ks</span>
+                    </td>
+                    {isOwner && (
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">
+                        {fmt(item.unit_price)}
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => openEdit(item)}
+                        className="btn-secondary text-xs"
+                      >
+                        Upraviť
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {showModal && (
+        <ItemModal
+          item={modalItem}
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+        />
+      )}
+    </div>
+  );
+}
