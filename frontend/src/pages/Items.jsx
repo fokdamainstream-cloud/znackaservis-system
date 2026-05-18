@@ -143,7 +143,10 @@ export default function Items() {
     setLoading(true);
     try {
       const r = await api.get('/items/');
-      setItems(r.data.sort((a, b) => a.name.localeCompare(b.name, 'sk')));
+      const arr = Array.isArray(r.data) ? r.data : [];
+      setItems(arr.sort((a, b) => a.name.localeCompare(b.name, 'sk')));
+    } catch {
+      setItems([]);
     } finally {
       setLoading(false);
     }

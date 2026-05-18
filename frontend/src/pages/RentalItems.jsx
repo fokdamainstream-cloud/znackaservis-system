@@ -10,7 +10,10 @@ export default function RentalItems() {
   const [loading, setLoading] = useState(true);
 
   const load = () => {
-    api.get('/rental-items/').then((r) => setItems(r.data)).finally(() => setLoading(false));
+    api.get('/rental-items/')
+      .then((r) => setItems(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
