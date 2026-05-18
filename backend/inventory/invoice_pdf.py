@@ -2,31 +2,48 @@ import os
 import tempfile
 import qrcode
 from django.http import HttpResponse
-
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONT_PATH_REGULAR = os.path.join(BASE_DIR, 'Roboto-Regular.ttf')
-FONT_PATH_BOLD = os.path.join(BASE_DIR, 'Roboto-Bold.ttf')
-
 try:
-    pdfmetrics.registerFont(TTFont('Roboto', FONT_PATH_REGULAR))
-    pdfmetrics.registerFont(TTFont('Roboto-Bold', FONT_PATH_BOLD))
+    pdfmetrics.registerFont(TTFont('Roboto',      os.path.join(BASE_DIR, 'Roboto-Regular.ttf')))
+    pdfmetrics.registerFont(TTFont('Roboto-Bold', os.path.join(BASE_DIR, 'Roboto-Bold.ttf')))
     FONT_NAME = 'Roboto'
     FONT_BOLD = 'Roboto-Bold'
 except Exception as e:
-    print(f"Nepodarilo sa načítať Roboto fonty ({e}), prepínam na zálohu.")
+    print(f"Roboto font chyba ({e}), záloha na Helvetica.")
     FONT_NAME = 'Helvetica'
     FONT_BOLD = 'Helvetica-Bold'
 
-IBAN = "SK36 1100 0000 0029 4229 0477"
+IBAN  = "SK36 1100 0000 0029 4229 0477"
 SWIFT = "TATRSKBX"
+
+# ── Brand farby ────────────────────────────────────────────────
+C_NAVY    = colors.HexColor('#1B3A6B')
+C_AMBER   = colors.HexColor('#F59E0B')
+C_LIGHT   = colors.HexColor('#F8FAFC')
+C_BLUE_LT = colors.HexColor('#EFF6FF')
+C_BORDER  = colors.HexColor('#CBD5E1')
+C_TEXT    = colors.HexColor('#1E293B')
+C_MUTED   = colors.HexColor('#64748B')
+C_HDR_SUB = colors.HexColor('#93C5FD')   # svetlomodrý subtext v headeri
+
+
+def _s(name, bold=False, size=8.5, leading=None, color=None, align=0):
+    return ParagraphStyle(
+        name,
+        fontName=FONT_BOLD if bold else FONT_NAME,
+        fontSize=size,
+        leading=leading or round(size * 1.4, 1),
+        alignment=align,
+        textColor=color if color is not None else C_TEXT,
+    )
 
 
 def generate_invoice_pdf(invoice):
@@ -34,224 +51,305 @@ def generate_invoice_pdf(invoice):
     response['Content-Disposition'] = f'attachment; filename="faktura_{invoice.invoice_number}.pdf"'
 
     doc = SimpleDocTemplate(response, pagesize=A4,
-                            topMargin=12*mm, bottomMargin=12*mm,
-                            leftMargin=12*mm, rightMargin=12*mm)
-
-    styles = getSampleStyleSheet()
-    style_normal = ParagraphStyle('InvNormal', parent=styles['Normal'], fontName=FONT_NAME, fontSize=8.5, leading=11)
-    style_bold   = ParagraphStyle('InvBold',   parent=styles['Normal'], fontName=FONT_BOLD,  fontSize=8.5, leading=11)
-    style_title  = ParagraphStyle('InvTitle',  parent=styles['Title'],  fontName=FONT_BOLD,  fontSize=15, leading=18, alignment=0)
-
+                            topMargin=14*mm, bottomMargin=14*mm,
+                            leftMargin=14*mm, rightMargin=14*mm)
     elements = []
     partner = invoice.partner
 
-    # --- HLAVIČKA: DODÁVATEĽ / ODBERATEĽ ---
-    partner_name    = partner.name    if partner else ''
-    partner_street  = partner.street  if partner else ''
-    partner_zip     = partner.zip_code if partner else ''
-    partner_city    = partner.city    if partner else ''
-    partner_ico     = partner.ico     if partner else ''
-    partner_dic     = partner.dic     if partner else ''
-    partner_ic_dph  = partner.ic_dph  if partner else ''
+    pn   = (partner.name      if partner else '') or ''
+    pst  = (partner.street    if partner else '') or ''
+    pz   = (partner.zip_code  if partner else '') or ''
+    pc   = (partner.city      if partner else '') or ''
+    pi   = (partner.ico       if partner else '') or ''
+    pd   = (partner.dic       if partner else '') or ''
+    pid  = (partner.ic_dph    if partner else '') or ''
+    padr = f"{pst}, {pz} {pc}".strip(', ')
 
-    partner_address = f"{partner_street}, {partner_zip} {partner_city}".strip(', ')
+    # ── Štýly ──────────────────────────────────────────────────
+    sN    = _s('iN')
+    sMut  = _s('iMut',  color=C_MUTED, size=7.5)
+    # header bar
+    sHCo  = _s('iHCo',  bold=True,  size=13,   color=colors.white)
+    sHTg  = _s('iHTg',  size=7.5,              color=C_HDR_SUB)
+    sHLb  = _s('iHLb',  size=8,                color=C_HDR_SUB,    align=2)
+    sHNm  = _s('iHNm',  bold=True,  size=16,   color=C_AMBER,      align=2)
+    # address cards
+    sALb  = _s('iALb',  bold=True,  size=7,    color=C_MUTED)
+    sAFm  = _s('iAFm',  bold=True,  size=10,   color=C_TEXT)
+    sALn  = _s('iALn',  size=8,                color=C_TEXT)
+    sAReg = _s('iAReg', size=7,                color=C_MUTED)
+    # meta strip
+    sMlb  = _s('iMlb',  size=7,                color=C_MUTED)
+    sMvl  = _s('iMvl',  bold=True,  size=8.5,  color=C_TEXT)
+    # items table header
+    sTH   = _s('iTH',   bold=True,  size=8,    color=colors.white)
+    sTHR  = _s('iTHR',  bold=True,  size=8,    color=colors.white, align=2)
+    sTDR  = _s('iTDR',  size=8.5,              align=2)
+    # totals
+    sTlb  = _s('iTlb',  size=8.5,              color=C_TEXT)
+    sTvl  = _s('iTvl',  size=8.5,              color=C_TEXT,       align=2)
+    sTLB  = _s('iTLB',  bold=True,  size=9,    color=colors.white)
+    sTVB  = _s('iTVB',  bold=True,  size=11,   color=C_AMBER,      align=2)
+    # payment
+    sPLb  = _s('iPLb',  size=7,                color=C_MUTED)
+    sPVl  = _s('iPVl',  bold=True,  size=8.5,  color=C_TEXT)
+    # signature
+    sSig  = _s('iSig',  size=7.5,              color=C_MUTED,      align=1)
 
-    supplier_info = [
-        [Paragraph("<b>DODÁVATEĽ</b>", style_bold),          Paragraph("<b>ODBERATEĽ</b>", style_bold)],
-        [Paragraph("Značka servis s. r. o.", style_normal),  Paragraph(partner_name, style_normal)],
-        [Paragraph("Veľká Okružná 17, 01001 Žilina", style_normal), Paragraph(partner_address, style_normal)],
-        [Paragraph("Slovensko", style_normal),               Paragraph("", style_normal)],
-        [Paragraph("IČO: 57359202",   style_normal),         Paragraph(f"IČO: {partner_ico}", style_normal)],
-        [Paragraph("DIČ: 2122685136", style_normal),         Paragraph(f"DIČ: {partner_dic}", style_normal)],
-        [Paragraph("IČ DPH: SK2122685136", style_normal),    Paragraph(f"IČ DPH: {partner_ic_dph}", style_normal)],
-        [Paragraph("Zapísaná v OR OS Žilina, oddiel: Sro,<br/>vložka č.: 89577/L", style_normal), Paragraph("", style_normal)],
+    # ── 1. HEADER BAR ─────────────────────────────────────────
+    # PAGE_W = 210 - 14 - 14 = 182mm  →  [110, 72] = 182 ✓
+    hdr_tbl = Table([[
+        [
+            Paragraph("Znacka servis s. r. o.", sHCo),
+            Spacer(1, 1.5*mm),
+            Paragraph("Velka Okruzna 17, 01001 Zilina  ·  ICO: 57359202", sHTg),
+            Paragraph("DIC: 2122685136  ·  IC DPH: SK2122685136", sHTg),
+        ],
+        [
+            Paragraph("FAKTURA", sHLb),
+            Spacer(1, 1*mm),
+            Paragraph(f"c. {invoice.invoice_number}", sHNm),
+        ],
+    ]], colWidths=[110*mm, 72*mm])
+    hdr_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_NAVY),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5*mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 5*mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 5*mm),
+    ]))
+    elements.append(hdr_tbl)
+    elements.append(HRFlowable(width="100%", thickness=3, color=C_AMBER, spaceAfter=5*mm))
+
+    # ── 2. ADDRESS CARDS ──────────────────────────────────────
+    # [91, 91] = 182 ✓
+    sup_cell = [
+        Paragraph("DODAVATEL", sALb),
+        Spacer(1, 1.5*mm),
+        Paragraph("Znacka servis s. r. o.", sAFm),
+        Paragraph("Velka Okruzna 17, 01001 Zilina", sALn),
+        Paragraph("Slovensko", sALn),
+        Spacer(1, 2*mm),
+        Paragraph("ICO: 57359202  ·  DIC: 2122685136", sALn),
+        Paragraph("IC DPH: SK2122685136", sALn),
+        Paragraph("OR OS Zilina, Sro, vl. c. 89577/L", sAReg),
     ]
-    # Kontaktné údaje partnera (len ak sú vyplnené)
-    if invoice.contact_person:
-        supplier_info.append([Paragraph("", style_normal), Paragraph(f"Kontakt: {invoice.contact_person}", style_normal)])
-    if invoice.contact_email:
-        supplier_info.append([Paragraph("", style_normal), Paragraph(f"E-mail: {invoice.contact_email}", style_normal)])
-    if invoice.contact_phone:
-        supplier_info.append([Paragraph("", style_normal), Paragraph(f"Tel.: {invoice.contact_phone}", style_normal)])
-
-    table_header = Table(supplier_info, colWidths=[93*mm, 93*mm])
-    table_header.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#F5F5F7')),
-        ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#F5F5F7')),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(table_header)
-    elements.append(Spacer(1, 5*mm))
-
-    # --- NÁZOV DOKUMENTU ---
-    elements.append(Paragraph(f"FAKTÚRA č. {invoice.invoice_number}", style_title))
-    elements.append(Spacer(1, 4*mm))
-
-    # --- INFORMÁCIE O FAKTÚRE ---
-    date_of_supply_str = invoice.date_of_supply.strftime('%d.%m.%Y') if invoice.date_of_supply else '—'
-
-    info_data = [
-        [Paragraph("Dátum vystavenia:", style_bold),
-         Paragraph(invoice.created_at.strftime('%d.%m.%Y'), style_normal),
-         Paragraph("Variabilný symbol:", style_bold),
-         Paragraph(invoice.invoice_number, style_normal)],
-        [Paragraph("Dátum splatnosti:", style_bold),
-         Paragraph(invoice.due_date.strftime('%d.%m.%Y'), style_normal),
-         Paragraph("Číslo objednávky:", style_bold),
-         Paragraph(invoice.customer_order_number or '—', style_normal)],
-        [Paragraph("Dátum dodania:", style_bold),
-         Paragraph(date_of_supply_str, style_normal),
-         Paragraph("Zákazka:", style_bold),
-         Paragraph(invoice.job_number or '—', style_normal)],
-        [Paragraph("Miesto dodania:", style_bold),
-         Paragraph(invoice.place_of_supply or '—', style_normal),
-         Paragraph("Dodací list:", style_bold),
-         Paragraph(invoice.delivery_note or '—', style_normal)],
+    cust_cell = [
+        Paragraph("ODBERATEL", sALb),
+        Spacer(1, 1.5*mm),
+        Paragraph(pn, sAFm),
+        Paragraph(padr, sALn),
+        Spacer(1, 2*mm),
     ]
-    table_info = Table(info_data, colWidths=[33*mm, 60*mm, 33*mm, 60*mm])
-    table_info.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-    ]))
-    elements.append(table_info)
-    elements.append(Spacer(1, 5*mm))
+    if pi:  cust_cell.append(Paragraph(f"ICO: {pi}", sALn))
+    if pd:  cust_cell.append(Paragraph(f"DIC: {pd}", sALn))
+    if pid: cust_cell.append(Paragraph(f"IC DPH: {pid}", sALn))
+    for lbl, val in [("Kontakt", invoice.contact_person),
+                     ("E-mail",  invoice.contact_email),
+                     ("Tel.",    invoice.contact_phone)]:
+        if val:
+            cust_cell.append(Paragraph(f"{lbl}: {val}", sALn))
 
-    elements.append(Paragraph("Faktúrujeme Vám za:", style_normal))
-    elements.append(Spacer(1, 3*mm))
-
-    # --- TABUĽKA POLOŽIEK ---
-    vat_rate = invoice.vat_rate
-    table_data = [[
-        Paragraph("<b>Č.</b>",                            style_bold),
-        Paragraph("<b>NÁZOV (popis tovaru/služby)</b>",   style_bold),
-        Paragraph("<b>MNOŽSTVO</b>",                      style_bold),
-        Paragraph("<b>JEDN. CENA</b>",                    style_bold),
-        Paragraph(f"<b>DPH %</b>",                        style_bold),
-        Paragraph("<b>CELKOM</b>",                        style_bold),
-    ]]
-
-    for idx, inv_item in enumerate(invoice.items.all(), 1):
-        item_name = inv_item.item.name if inv_item.item else getattr(inv_item, 'description', '—')
-        table_data.append([
-            Paragraph(str(idx),                          style_normal),
-            Paragraph(item_name,                         style_normal),
-            Paragraph(f"{inv_item.quantity} ks",         style_normal),
-            Paragraph(f"{inv_item.unit_price:.2f} €",    style_normal),
-            Paragraph(f"{vat_rate}",                     style_normal),
-            Paragraph(f"{inv_item.total_price:.2f} €",   style_normal),
-        ])
-
-    col_widths = [10*mm, 76*mm, 25*mm, 30*mm, 15*mm, 30*mm]
-    table_items = Table(table_data, colWidths=col_widths, repeatRows=1)
-    table_items.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F5F5F7')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#DCDCE0')),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(table_items)
-    elements.append(Spacer(1, 5*mm))
-
-    # Poznámka pre zákazníka (ak je vyplnená)
-    if invoice.customer_note:
-        elements.append(Paragraph(f"<i>Poznámka: {invoice.customer_note}</i>", style_normal))
-        elements.append(Spacer(1, 4*mm))
-
-    # --- QR KÓD + PLATOBNÉ ÚDAJE ---
-    vs   = invoice.invoice_number
-    total_amount = float(invoice.total)
-    qr_text = (
-        f"SPD*1.0*IBAN:{IBAN.replace(' ', '')}*AMT:{total_amount:.2f}"
-        f"*CC:EUR*X-VS:{vs}*X-SS:0*X-RS:0*MSG:Platba za faktúru {vs}"
-    )
-    qr = qrcode.QRCode(box_size=3, border=1)
-    qr.add_data(qr_text)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    img.save(temp_file.name)
-    temp_file.close()
-    qr_element = Image(temp_file.name, width=28*mm, height=28*mm)
-
-    # --- SÚČTY (ľavá strana) ---
-    subtotal_val = float(invoice.subtotal)
-    vat_val      = float(invoice.vat_amount)
-    total_val    = float(invoice.total)
-
-    if invoice.is_vat_payer and vat_rate > 0:
-        total_rows = [
-            [Paragraph(f"Základ DPH ({vat_rate} %)", style_normal), Paragraph(f"{subtotal_val:.2f} €", style_normal)],
-            [Paragraph(f"Výška DPH ({vat_rate} %)", style_normal), Paragraph(f"{vat_val:.2f} €", style_normal)],
-            [Paragraph("<b>Celková suma</b>", style_bold), Paragraph(f"<b>{total_val:.2f} €</b>", style_bold)],
-        ]
-    else:
-        total_rows = [
-            [Paragraph("Základ (bez DPH)", style_normal), Paragraph(f"{subtotal_val:.2f} €", style_normal)],
-            [Paragraph("<b>Celková suma</b>", style_bold), Paragraph(f"<b>{total_val:.2f} €</b>", style_bold)],
-        ]
-
-    table_total = Table(total_rows, colWidths=[50*mm, 35*mm])
-    table_total.setStyle(TableStyle([
-        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#EBEBEF')),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F5F5F7')),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-
-    style_center_line = ParagraphStyle('CenterLine', parent=style_normal, alignment=1, textColor=colors.gray)
-    style_center_text = ParagraphStyle('CenterText', parent=style_bold,   alignment=1, fontSize=8)
-    left_elements = [
-        table_total,
-        Spacer(1, 12*mm),
-        Paragraph("___________________________________", style_center_line),
-        Spacer(1, 1*mm),
-        Paragraph("Pečiatka a podpis", style_center_text),
-    ]
-
-    # --- PLATOBNÝ BOX (pravá strana) ---
-    payment_method = invoice.payment_method or 'Bankový prevod'
-    payment_html = (
-        f"<b>Spôsob úhrady:</b> {payment_method}<br/>"
-        f"<font size='10'><b>Suma na úhradu: {total_val:.2f} EUR</b></font><br/><br/>"
-        f"<b>Variabilný symbol:</b> {vs}<br/>"
-        f"<b>IBAN:</b> {IBAN}<br/>"
-        f"<b>SWIFT / BIC:</b> {SWIFT}"
-    )
-    table_payment_box = Table(
-        [[Paragraph(payment_html, style_normal), qr_element]],
-        colWidths=[62*mm, 28*mm]
-    )
-    table_payment_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F5F5F7')),
-        ('BOX',        (0, 0), (-1, -1), 0.5, colors.HexColor('#DCDCE0')),
-        ('VALIGN',     (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN',      (1, 0), (1, 0),   'RIGHT'),
+    addr_tbl = Table([[sup_cell, cust_cell]], colWidths=[91*mm, 91*mm])
+    addr_tbl.setStyle(TableStyle([
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('BACKGROUND',    (0, 0), (0, 0),   C_LIGHT),
+        ('BACKGROUND',    (1, 0), (1, 0),   C_BLUE_LT),
+        ('BOX',           (0, 0), (0, 0),   0.5, C_BORDER),
+        ('BOX',           (1, 0), (1, 0),   0.5, C_BORDER),
         ('TOPPADDING',    (0, 0), (-1, -1), 4*mm),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4*mm),
         ('LEFTPADDING',   (0, 0), (-1, -1), 4*mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4*mm),
+        ('LINEAFTER',     (0, 0), (0, -1),  3, C_AMBER),
+    ]))
+    elements.append(addr_tbl)
+    elements.append(Spacer(1, 5*mm))
+
+    # ── 3. META INFO STRIP ─────────────────────────────────────
+    # [36.4 * 5] ≈ 182 ✓
+    ds = invoice.date_of_supply.strftime('%d.%m.%Y') if invoice.date_of_supply else '—'
+
+    def mc(label, val):
+        return [Paragraph(label, sMlb), Paragraph(str(val), sMvl)]
+
+    meta_tbl = Table([[
+        mc("Datum vystavenia",   invoice.created_at.strftime('%d.%m.%Y')),
+        mc("Datum splatnosti",   invoice.due_date.strftime('%d.%m.%Y')),
+        mc("Datum dodania",      ds),
+        mc("Variabilny symbol",  invoice.invoice_number),
+        mc("Cislo obj. / zakazky",
+           f"{invoice.customer_order_number or '—'} / {invoice.job_number or '—'}"),
+    ]], colWidths=[36.4*mm] * 5)
+    meta_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_LIGHT),
+        ('BOX',           (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('LINEAFTER',     (0, 0), (-2, -1), 0.5, C_BORDER),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3*mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3*mm),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 2*mm),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(meta_tbl)
+    elements.append(Spacer(1, 6*mm))
+
+    # ── 4. ITEMS TABLE ─────────────────────────────────────────
+    # [10, 74, 26, 30, 16, 26] = 182 ✓
+    vat_rate   = invoice.vat_rate
+    items_list = list(invoice.items.all())
+
+    rows = [[
+        Paragraph("C.",       sTH),
+        Paragraph("Nazov / popis tovaru alebo sluzby", sTH),
+        Paragraph("Mn.",      sTHR),
+        Paragraph("J. cena",  sTHR),
+        Paragraph("DPH",      sTHR),
+        Paragraph("Celkom",   sTHR),
+    ]]
+    for idx, it in enumerate(items_list, 1):
+        nm = it.item.name if it.item else getattr(it, 'description', '—')
+        rows.append([
+            Paragraph(str(idx),                    sN),
+            Paragraph(nm,                          sN),
+            Paragraph(f"{it.quantity} ks",         sTDR),
+            Paragraph(f"{it.unit_price:.2f} €", sTDR),
+            Paragraph(f"{vat_rate} %",             sTDR),
+            Paragraph(f"{it.total_price:.2f} €", sTDR),
+        ])
+
+    tbl_items = Table(rows, colWidths=[10*mm, 74*mm, 26*mm, 30*mm, 16*mm, 26*mm], repeatRows=1)
+    item_st = [
+        ('BACKGROUND',    (0, 0),  (-1, 0),  C_NAVY),
+        ('LINEBELOW',     (0, 0),  (-1, 0),  2, C_AMBER),
+        ('GRID',          (0, 1),  (-1, -1), 0.5, C_BORDER),
+        ('LINEBELOW',     (0, -1), (-1, -1), 0.5, C_BORDER),
+        ('VALIGN',        (0, 0),  (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0),  (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0),  (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0),  (-1, -1), 3*mm),
+        ('RIGHTPADDING',  (0, 0),  (-1, -1), 3*mm),
+    ]
+    for i in range(len(items_list)):
+        if i % 2 == 1:
+            item_st.append(('BACKGROUND', (0, i + 1), (-1, i + 1), C_LIGHT))
+    tbl_items.setStyle(TableStyle(item_st))
+    elements.append(tbl_items)
+    elements.append(Spacer(1, 5*mm))
+
+    if invoice.customer_note:
+        elements.append(Paragraph(f"Poznamka: {invoice.customer_note}", sMut))
+        elements.append(Spacer(1, 4*mm))
+
+    # ── 5. BOTTOM: PAYMENT BOX (ľavá) + SÚČTY (pravá) ─────────
+    # [100, 8, 74] = 182 ✓
+    vs  = invoice.invoice_number
+    tot = float(invoice.total)
+    sub = float(invoice.subtotal)
+    vat = float(invoice.vat_amount)
+
+    # QR kód
+    qr_text = (f"SPD*1.0*IBAN:{IBAN.replace(' ', '')}*AMT:{tot:.2f}"
+               f"*CC:EUR*X-VS:{vs}*X-SS:0*X-RS:0*MSG:Platba za fakturu {vs}")
+    qr = qrcode.QRCode(box_size=3, border=1)
+    qr.add_data(qr_text)
+    qr.make(fit=True)
+    qi = qr.make_image(fill_color="black", back_color="white")
+    tf = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+    qi.save(tf.name)
+    tf.close()
+    qr_img = Image(tf.name, width=26*mm, height=26*mm)
+
+    # Platobné info — ako zoznam paragrafov v bunke (70mm)
+    pay_cell = [
+        Paragraph("Sposob ukrady", sPLb),
+        Paragraph(invoice.payment_method or 'Bankovy prevod', sPVl),
+        Spacer(1, 2*mm),
+        Paragraph("Variabilny symbol", sPLb),
+        Paragraph(vs, sPVl),
+        Spacer(1, 2*mm),
+        Paragraph("IBAN", sPLb),
+        Paragraph(IBAN, sPVl),
+        Spacer(1, 2*mm),
+        Paragraph("SWIFT / BIC", sPLb),
+        Paragraph(SWIFT, sPVl),
+    ]
+    # pay_box: [70, 30] = 100mm ✓
+    pay_box = Table([[pay_cell, qr_img]], colWidths=[70*mm, 30*mm])
+    pay_box.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_LIGHT),
+        ('BOX',           (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN',         (1, 0), (1, 0),   'CENTER'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4*mm),
+        ('LEFTPADDING',   (0, 0), (0, 0),   4*mm),
+        ('RIGHTPADDING',  (0, 0), (0, 0),   2*mm),
+        ('LEFTPADDING',   (1, 0), (1, 0),   2*mm),
+        ('RIGHTPADDING',  (1, 0), (1, 0),   2*mm),
     ]))
 
-    # --- SPODNÁ ČASŤ (súčty + platba vedľa seba) ---
-    table_bottom = Table(
-        [[left_elements, "", table_payment_box]],
-        colWidths=[85*mm, 11*mm, 90*mm]
+    # Tabuľka súčtov: [44, 30] = 74mm ✓
+    if invoice.is_vat_payer and vat_rate > 0:
+        tot_rows = [
+            [Paragraph(f"Zaklad DPH ({vat_rate} %)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
+            [Paragraph(f"DPH ({vat_rate} %)",         sTlb), Paragraph(f"{vat:.2f} €", sTvl)],
+            [Paragraph("SUMA NA UHRADU",               sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
+        ]
+    else:
+        tot_rows = [
+            [Paragraph("Bez DPH (§ 4 ZDPH)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
+            [Paragraph("SUMA NA UHRADU",      sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
+        ]
+
+    tbl_tot = Table(tot_rows, colWidths=[44*mm, 30*mm])
+    tot_st = [
+        ('VALIGN',        (0, 0),  (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0),  (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0),  (-1, -1), 3),
+        ('LEFTPADDING',   (0, 0),  (-1, -1), 3*mm),
+        ('RIGHTPADDING',  (0, 0),  (-1, -1), 3*mm),
+        ('BACKGROUND',    (0, -1), (-1, -1), C_NAVY),
+        ('LINEABOVE',     (0, -1), (-1, -1), 2, C_AMBER),
+        ('TOPPADDING',    (0, -1), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 4),
+        ('BOX',           (0, 0),  (-1, -1), 0.5, C_BORDER),
+    ]
+    if len(tot_rows) > 1:
+        tot_st.append(('LINEBELOW', (0, 0), (-1, -2), 0.5, C_BORDER))
+    tbl_tot.setStyle(TableStyle(tot_st))
+
+    # Bottom row [100, 8, 74] = 182mm ✓
+    bottom = Table([[pay_box, "", tbl_tot]], colWidths=[100*mm, 8*mm, 74*mm])
+    bottom.setStyle(TableStyle([
+        ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
+        ('TOPPADDING',    (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(bottom)
+    elements.append(Spacer(1, 10*mm))
+
+    # Podpis
+    sig_tbl = Table(
+        [[Paragraph("_" * 38, sSig), "", ""]],
+        colWidths=[100*mm, 8*mm, 74*mm]
     )
-    table_bottom.setStyle(TableStyle([
-        ('VALIGN',       (0, 0), (-1, -1), 'TOP'),
+    sig_tbl.setStyle(TableStyle([
         ('LEFTPADDING',  (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
     ]))
-    elements.append(table_bottom)
+    elements.append(sig_tbl)
+    elements.append(Paragraph("Peciatka a podpis", sSig))
 
     doc.build(elements)
 
     try:
-        os.unlink(temp_file.name)
+        os.unlink(tf.name)
     except Exception:
         pass
 

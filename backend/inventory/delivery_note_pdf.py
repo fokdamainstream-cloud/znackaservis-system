@@ -3,152 +3,242 @@ from django.http import HttpResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONT_PATH_REGULAR = os.path.join(BASE_DIR, 'Roboto-Regular.ttf')
-FONT_PATH_BOLD = os.path.join(BASE_DIR, 'Roboto-Bold.ttf')
-
 try:
-    pdfmetrics.registerFont(TTFont('Roboto', FONT_PATH_REGULAR))
-    pdfmetrics.registerFont(TTFont('Roboto-Bold', FONT_PATH_BOLD))
+    pdfmetrics.registerFont(TTFont('Roboto',      os.path.join(BASE_DIR, 'Roboto-Regular.ttf')))
+    pdfmetrics.registerFont(TTFont('Roboto-Bold', os.path.join(BASE_DIR, 'Roboto-Bold.ttf')))
     FONT_NAME = 'Roboto'
     FONT_BOLD = 'Roboto-Bold'
 except Exception:
     FONT_NAME = 'Helvetica'
     FONT_BOLD = 'Helvetica-Bold'
 
+# ── Brand farby (rovnaké ako faktúra) ──────────────────────────
+C_NAVY    = colors.HexColor('#1B3A6B')
+C_AMBER   = colors.HexColor('#F59E0B')
+C_LIGHT   = colors.HexColor('#F8FAFC')
+C_BLUE_LT = colors.HexColor('#EFF6FF')
+C_BORDER  = colors.HexColor('#CBD5E1')
+C_TEXT    = colors.HexColor('#1E293B')
+C_MUTED   = colors.HexColor('#64748B')
+C_HDR_SUB = colors.HexColor('#93C5FD')
+
+
+def _s(name, bold=False, size=8.5, leading=None, color=None, align=0):
+    return ParagraphStyle(
+        name,
+        fontName=FONT_BOLD if bold else FONT_NAME,
+        fontSize=size,
+        leading=leading or round(size * 1.4, 1),
+        alignment=align,
+        textColor=color if color is not None else C_TEXT,
+    )
+
 
 def generate_delivery_note_pdf(dn):
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="dodaci_list_{dn.delivery_note_number.replace("/", "_")}.pdf"'
+    response['Content-Disposition'] = (
+        f'attachment; filename="dodaci_list_{dn.delivery_note_number.replace("/", "_")}.pdf"'
+    )
 
     doc = SimpleDocTemplate(response, pagesize=A4,
-                            topMargin=12*mm, bottomMargin=12*mm,
-                            leftMargin=12*mm, rightMargin=12*mm)
-
-    styles = getSampleStyleSheet()
-    style_normal = ParagraphStyle('DNNormal', parent=styles['Normal'], fontName=FONT_NAME, fontSize=8.5, leading=11)
-    style_bold   = ParagraphStyle('DNBold',   parent=styles['Normal'], fontName=FONT_BOLD,  fontSize=8.5, leading=11)
-    style_title  = ParagraphStyle('DNTitle',  parent=styles['Title'],  fontName=FONT_BOLD,  fontSize=18, leading=22, alignment=0)
-    style_center = ParagraphStyle('DNCenter', parent=style_bold, alignment=1, fontSize=8)
-    style_center_line = ParagraphStyle('DNLine', parent=style_normal, alignment=1, textColor=colors.gray)
-
+                            topMargin=14*mm, bottomMargin=14*mm,
+                            leftMargin=14*mm, rightMargin=14*mm)
     elements = []
     partner = dn.partner
 
-    # Resolve partner info
-    p_name    = (partner.name      if partner else None) or dn.partner_name or ''
-    p_street  = (partner.street    if partner else None) or ''
-    p_zip     = (partner.zip_code  if partner else None) or ''
-    p_city    = (partner.city      if partner else None) or ''
-    p_ico     = (partner.ico       if partner else None) or dn.partner_ico or ''
-    p_dic     = (partner.dic       if partner else None) or dn.partner_dic or ''
-    p_address = f"{p_street}, {p_zip} {p_city}".strip(', ')
+    pn   = (partner.name      if partner else None) or dn.partner_name or ''
+    pst  = (partner.street    if partner else None) or ''
+    pz   = (partner.zip_code  if partner else None) or ''
+    pc   = (partner.city      if partner else None) or ''
+    pi   = (partner.ico       if partner else None) or dn.partner_ico or ''
+    pd   = (partner.dic       if partner else None) or dn.partner_dic or ''
+    padr = f"{pst}, {pz} {pc}".strip(', ')
 
-    # Header: Dodávateľ / Odberateľ
-    supplier_info = [
-        [Paragraph("<b>DODÁVATEĽ</b>", style_bold),          Paragraph("<b>ODBERATEĽ</b>", style_bold)],
-        [Paragraph("Značka servis s. r. o.", style_normal),  Paragraph(p_name, style_normal)],
-        [Paragraph("Veľká Okružná 17, 01001 Žilina", style_normal), Paragraph(p_address, style_normal)],
-        [Paragraph("Slovensko", style_normal),               Paragraph("", style_normal)],
-        [Paragraph("IČO: 57359202",   style_normal),         Paragraph(f"IČO: {p_ico}", style_normal)],
-        [Paragraph("DIČ: 2122685136", style_normal),         Paragraph(f"DIČ: {p_dic}", style_normal)],
-        [Paragraph("IČ DPH: SK2122685136", style_normal),    Paragraph("", style_normal)],
-    ]
-    table_header = Table(supplier_info, colWidths=[93*mm, 93*mm])
-    table_header.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#F5F5F7')),
-        ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#F5F5F7')),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    # ── Štýly ──────────────────────────────────────────────────
+    sN    = _s('dN')
+    sMut  = _s('dMut',  color=C_MUTED, size=7.5)
+    # header bar
+    sHCo  = _s('dHCo',  bold=True,  size=13,   color=colors.white)
+    sHTg  = _s('dHTg',  size=7.5,              color=C_HDR_SUB)
+    sHLb  = _s('dHLb',  size=8,                color=C_HDR_SUB,    align=2)
+    sHNm  = _s('dHNm',  bold=True,  size=16,   color=C_AMBER,      align=2)
+    # address cards
+    sALb  = _s('dALb',  bold=True,  size=7,    color=C_MUTED)
+    sAFm  = _s('dAFm',  bold=True,  size=10,   color=C_TEXT)
+    sALn  = _s('dALn',  size=8,                color=C_TEXT)
+    sAReg = _s('dAReg', size=7,                color=C_MUTED)
+    # meta strip
+    sMlb  = _s('dMlb',  size=7,                color=C_MUTED)
+    sMvl  = _s('dMvl',  bold=True,  size=8.5,  color=C_TEXT)
+    # items table
+    sTH   = _s('dTH',   bold=True,  size=8,    color=colors.white)
+    sTHR  = _s('dTHR',  bold=True,  size=8,    color=colors.white, align=2)
+    sTDR  = _s('dTDR',  size=8.5,              align=2)
+    # signature
+    sSig  = _s('dSig',  size=7.5,              color=C_MUTED,      align=1)
+
+    # ── 1. HEADER BAR ─────────────────────────────────────────
+    # [110, 72] = 182mm ✓
+    hdr_tbl = Table([[
+        [
+            Paragraph("Znacka servis s. r. o.", sHCo),
+            Spacer(1, 1.5*mm),
+            Paragraph("Velka Okruzna 17, 01001 Zilina  ·  ICO: 57359202", sHTg),
+            Paragraph("DIC: 2122685136  ·  IC DPH: SK2122685136", sHTg),
+        ],
+        [
+            Paragraph("DODACI LIST", sHLb),
+            Spacer(1, 1*mm),
+            Paragraph(f"c. {dn.delivery_note_number}", sHNm),
+        ],
+    ]], colWidths=[110*mm, 72*mm])
+    hdr_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_NAVY),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5*mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 5*mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 5*mm),
     ]))
-    elements.append(table_header)
+    elements.append(hdr_tbl)
+    elements.append(HRFlowable(width="100%", thickness=3, color=C_AMBER, spaceAfter=5*mm))
+
+    # ── 2. ADDRESS CARDS ──────────────────────────────────────
+    # [91, 91] = 182mm ✓
+    sup_cell = [
+        Paragraph("DODAVATEL", sALb),
+        Spacer(1, 1.5*mm),
+        Paragraph("Znacka servis s. r. o.", sAFm),
+        Paragraph("Velka Okruzna 17, 01001 Zilina", sALn),
+        Paragraph("Slovensko", sALn),
+        Spacer(1, 2*mm),
+        Paragraph("ICO: 57359202  ·  DIC: 2122685136", sALn),
+        Paragraph("IC DPH: SK2122685136", sALn),
+        Paragraph("OR OS Zilina, Sro, vl. c. 89577/L", sAReg),
+    ]
+    cust_cell = [
+        Paragraph("ODBERATEL", sALb),
+        Spacer(1, 1.5*mm),
+        Paragraph(pn, sAFm),
+        Paragraph(padr, sALn),
+        Spacer(1, 2*mm),
+    ]
+    if pi: cust_cell.append(Paragraph(f"ICO: {pi}", sALn))
+    if pd: cust_cell.append(Paragraph(f"DIC: {pd}", sALn))
+
+    addr_tbl = Table([[sup_cell, cust_cell]], colWidths=[91*mm, 91*mm])
+    addr_tbl.setStyle(TableStyle([
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('BACKGROUND',    (0, 0), (0, 0),   C_LIGHT),
+        ('BACKGROUND',    (1, 0), (1, 0),   C_BLUE_LT),
+        ('BOX',           (0, 0), (0, 0),   0.5, C_BORDER),
+        ('BOX',           (1, 0), (1, 0),   0.5, C_BORDER),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4*mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4*mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4*mm),
+        ('LINEAFTER',     (0, 0), (0, -1),  3, C_AMBER),
+    ]))
+    elements.append(addr_tbl)
     elements.append(Spacer(1, 5*mm))
 
-    # Title + meta
-    elements.append(Paragraph(f"DODACÍ LIST č. {dn.delivery_note_number}", style_title))
-    elements.append(Spacer(1, 3*mm))
-
+    # ── 3. META INFO STRIP ─────────────────────────────────────
+    # [45.5 * 4] = 182mm ✓
     date_str = dn.date.strftime('%d.%m.%Y') if dn.date else dn.created_at.strftime('%d.%m.%Y')
-    info_data = [
-        [Paragraph("Dátum vystavenia:", style_bold), Paragraph(date_str, style_normal),
-         Paragraph("Číslo dokladu:", style_bold), Paragraph(dn.delivery_note_number, style_normal)],
+
+    def mc(label, val):
+        return [Paragraph(label, sMlb), Paragraph(str(val), sMvl)]
+
+    meta_cols = [
+        mc("Datum vystavenia", date_str),
+        mc("Cislo dokladu",    dn.delivery_note_number),
+        mc("Faktura c.",       dn.invoice.invoice_number if dn.invoice else '—'),
+        mc("Miesto dodania",   getattr(dn, 'place_of_delivery', None) or '—'),
     ]
-    if dn.invoice:
-        info_data.append([
-            Paragraph("Faktúra č.:", style_bold), Paragraph(dn.invoice.invoice_number, style_normal),
-            Paragraph("", style_normal), Paragraph("", style_normal),
-        ])
-    table_info = Table(info_data, colWidths=[33*mm, 60*mm, 33*mm, 60*mm])
-    table_info.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    meta_tbl = Table([meta_cols], colWidths=[45.5*mm] * 4)
+    meta_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_LIGHT),
+        ('BOX',           (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('LINEAFTER',     (0, 0), (-2, -1), 0.5, C_BORDER),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3*mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3*mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 2*mm),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
     ]))
-    elements.append(table_info)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(meta_tbl)
+    elements.append(Spacer(1, 6*mm))
 
-    # Items table — NO PRICES
-    table_data = [[
-        Paragraph("<b>Č.</b>",        style_bold),
-        Paragraph("<b>NÁZOV POLOŽKY</b>", style_bold),
-        Paragraph("<b>MNOŽSTVO</b>",  style_bold),
-        Paragraph("<b>MJ</b>",        style_bold),
+    # ── 4. ITEMS TABLE ─────────────────────────────────────────
+    # [10, 116, 32, 24] = 182mm ✓
+    items_list = list(dn.items.order_by('pos'))
+    rows = [[
+        Paragraph("C.",           sTH),
+        Paragraph("Nazov polozky", sTH),
+        Paragraph("Mnozstvo",      sTHR),
+        Paragraph("MJ",            sTH),
     ]]
-    for idx, di in enumerate(dn.items.order_by('pos'), 1):
+    for idx, di in enumerate(items_list, 1):
         name = di.item_name or (di.item.name if di.item else '—')
-        table_data.append([
-            Paragraph(str(idx), style_normal),
-            Paragraph(name,     style_normal),
-            Paragraph(str(di.quantity).rstrip('0').rstrip('.'), style_normal),
-            Paragraph(di.mj,    style_normal),
+        qty  = str(di.quantity).rstrip('0').rstrip('.')
+        rows.append([
+            Paragraph(str(idx), sN),
+            Paragraph(name,     sN),
+            Paragraph(qty,      sTDR),
+            Paragraph(di.mj,    sN),
         ])
 
-    col_widths = [10*mm, 115*mm, 30*mm, 31*mm]
-    table_items = Table(table_data, colWidths=col_widths, repeatRows=1)
-    table_items.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F5F5F7')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#DCDCE0')),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(table_items)
-    elements.append(Spacer(1, 8*mm))
+    tbl_items = Table(rows, colWidths=[10*mm, 116*mm, 32*mm, 24*mm], repeatRows=1)
+    item_st = [
+        ('BACKGROUND',    (0, 0),  (-1, 0),  C_NAVY),
+        ('LINEBELOW',     (0, 0),  (-1, 0),  2, C_AMBER),
+        ('GRID',          (0, 1),  (-1, -1), 0.5, C_BORDER),
+        ('LINEBELOW',     (0, -1), (-1, -1), 0.5, C_BORDER),
+        ('VALIGN',        (0, 0),  (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0),  (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0),  (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0),  (-1, -1), 3*mm),
+        ('RIGHTPADDING',  (0, 0),  (-1, -1), 3*mm),
+    ]
+    for i in range(len(items_list)):
+        if i % 2 == 1:
+            item_st.append(('BACKGROUND', (0, i + 1), (-1, i + 1), C_LIGHT))
+    tbl_items.setStyle(TableStyle(item_st))
+    elements.append(tbl_items)
+    elements.append(Spacer(1, 6*mm))
 
-    # Notes
     if dn.notes:
-        elements.append(Paragraph(f"<i>Poznámka: {dn.notes}</i>", style_normal))
+        elements.append(Paragraph(f"Poznamka: {dn.notes}", sMut))
         elements.append(Spacer(1, 6*mm))
 
-    # Signature section
-    sig_data = [[
-        [
-            Spacer(1, 12*mm),
-            Paragraph("___________________________________", style_center_line),
+    # ── 5. PODPISOVÁ SEKCIA ────────────────────────────────────
+    # [85, 12, 85] = 182mm ✓
+    def sig_cell(label):
+        return [
+            Spacer(1, 14*mm),
+            Paragraph("_" * 38, sSig),
             Spacer(1, 1*mm),
-            Paragraph("Odovzdal (pečiatka, podpis)", style_center),
-        ],
-        "",
-        [
-            Spacer(1, 12*mm),
-            Paragraph("___________________________________", style_center_line),
-            Spacer(1, 1*mm),
-            Paragraph("Prevzal (pečiatka, podpis)", style_center),
-        ],
-    ]]
-    table_sig = Table(sig_data, colWidths=[85*mm, 16*mm, 85*mm])
-    table_sig.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            Paragraph(label, sSig),
+        ]
+
+    sig_tbl = Table(
+        [[sig_cell("Odovzdal (peciatka, podpis)"), "", sig_cell("Prevzal (peciatka, podpis)")]],
+        colWidths=[85*mm, 12*mm, 85*mm]
+    )
+    sig_tbl.setStyle(TableStyle([
+        ('VALIGN',       (0, 0), (-1, -1), 'BOTTOM'),
         ('LEFTPADDING',  (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
     ]))
-    elements.append(table_sig)
+    elements.append(sig_tbl)
 
     doc.build(elements)
     return response

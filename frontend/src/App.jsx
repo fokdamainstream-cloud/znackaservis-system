@@ -5,6 +5,7 @@ import {
   Package, Warehouse, Users, Contact, PackageX, LogOut,
 } from 'lucide-react';
 import { UserProvider, useUser } from './context/UserContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Quotations from './pages/Quotations';
 import QuotationForm from './pages/QuotationForm';
 import Invoices from './pages/Invoices';
@@ -265,6 +266,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="pl-60 px-6 py-6 min-h-screen">
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Quotations />} />
           <Route path="/quotations/new" element={<QuotationForm />} />
@@ -289,6 +291,7 @@ function AppContent() {
           <Route path="/partners" element={<Partners />} />
           <Route path="/stock-deficits" element={<StockDeficits />} />
         </Routes>
+        </ErrorBoundary>
       </main>
       <Sidebar />
     </div>
