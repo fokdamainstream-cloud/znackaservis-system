@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_URL = 'http://127.0.0.1:8000/api';
+import api from './api/axios';
 
 function InvoiceForm({ onClose, onSuccess }) {
     const [items, setItems] = useState([]);
@@ -31,7 +29,7 @@ function InvoiceForm({ onClose, onSuccess }) {
 
     const loadItems = async () => {
         try {
-            const response = await axios.get(`${API_URL}/items/`);
+            const response = await api.get('/items/');
             setItems(response.data);
         } catch (error) {
             console.error('Chyba pri načítaní položiek:', error);
@@ -83,7 +81,7 @@ function InvoiceForm({ onClose, onSuccess }) {
         };
 
         try {
-            await axios.post(`${API_URL}/invoices/`, data);
+            await api.post('/invoices/', data);
             alert('Faktúra bola úspešne vytvorená');
             if (onSuccess) onSuccess();
             onClose();
