@@ -355,8 +355,9 @@ export default function InvoiceForm() {
       setSuccess(isEdit ? 'Faktúra bola úspešne uložená!' : `Faktúra ${res.data.invoice_number} bola úspešne vytvorená!`);
       setTimeout(() => navigate('/invoices'), 1500);
     } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.detail || 'Chyba pri ukladaní';
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const d = err.response?.data;
+      const msg = (typeof d === 'string' ? d : d?.error || d?.detail || JSON.stringify(d)) || 'Chyba pri ukladaní';
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

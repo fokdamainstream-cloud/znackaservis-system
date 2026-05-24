@@ -56,8 +56,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         items_data = data.get('items', [])
-        partner_data = data.get('partner', {})
-        
+        partner_data = data.get('partner') or {}
+
         if not items_data:
             return Response({'error': 'Faktúra musí obsahovať aspoň jednu položku'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -523,8 +523,8 @@ class QuotationViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         items_data = data.get('items', [])
-        partner_data = data.get('partner', {})
-        
+        partner_data = data.get('partner') or {}
+
         if not items_data:
             return Response({'error': 'Ponuka musí obsahovať aspoň jednu položku'}, status=status.HTTP_400_BAD_REQUEST)
         
