@@ -1,4 +1,5 @@
 import requests
+from decimal import Decimal
 from datetime import datetime
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -221,9 +222,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
                 # Odpis skladu iba ak je položka viazaná na sklad
                 if stock_item:
-                    if stock_item.quantity < qty:
-                        return Response({'error': f"Nedostatok na sklade: {stock_item.name}"}, status=status.HTTP_400_BAD_REQUEST)
-                    stock_item.quantity -= qty
+                    qty_dec = Decimal(str(qty))
+                    if stock_item.quantity < qty_dec:
+                        return Response({'error': f"Nedostatok na sklade: {stock_item.name} (dostupné: {stock_item.quantity})"}, status=status.HTTP_400_BAD_REQUEST)
+                    stock_item.quantity -= qty_dec
                     stock_item.save()
                     StockMovement.objects.create(
                         item=stock_item,
