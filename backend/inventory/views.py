@@ -69,6 +69,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if not items_data:
             return Response({'error': 'Faktúra musí obsahovať aspoň jednu položku'}, status=status.HTTP_400_BAD_REQUEST)
 
+        due_date = data.get('due_date') or None
+        if not due_date:
+            return Response({'error': 'Zadajte dátum splatnosti'}, status=status.HTTP_400_BAD_REQUEST)
+
         vat_rate = data.get('vat_rate', 23)
         is_vat_payer = data.get('is_vat_payer', True)
         manual_discount_percent = float(data.get('discount_percent', 0))
@@ -137,7 +141,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 partner_address=p_addr,
                 invoice_number=invoice_number,
                 delivery_note=delivery_note,
-                due_date=data.get('due_date'),
+                due_date=due_date,
                 vat_rate=vat_rate,
                 is_vat_payer=is_vat_payer,
                 discount_percent=invoice_discount_percent,
@@ -348,8 +352,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                           'contact_phone', 'customer_note', 'internal_note']:
                 if field in data:
                     val = data[field]
-                    if field == 'date_of_supply' and val == '':
+                    if field in ('date_of_supply', 'due_date') and val == '':
                         val = None
+                    if field == 'due_date' and not val:
+                        continue
                     setattr(invoice, field, val)
 
             if items_data is not None:
