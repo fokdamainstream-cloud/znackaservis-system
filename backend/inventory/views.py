@@ -54,13 +54,21 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
     
     def create(self, request, *args, **kwargs):
+        try:
+            return self._create_invoice(request, *args, **kwargs)
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            return Response({'error': f'Chyba: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _create_invoice(self, request, *args, **kwargs):
         data = request.data
         items_data = data.get('items', [])
         partner_data = data.get('partner') or {}
 
         if not items_data:
             return Response({'error': 'Faktúra musí obsahovať aspoň jednu položku'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         vat_rate = data.get('vat_rate', 23)
         is_vat_payer = data.get('is_vat_payer', True)
         manual_discount_percent = float(data.get('discount_percent', 0))
