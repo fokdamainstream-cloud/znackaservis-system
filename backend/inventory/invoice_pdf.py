@@ -100,15 +100,15 @@ def generate_invoice_pdf(invoice):
     # PAGE_W = 210 - 14 - 14 = 182mm  →  [110, 72] = 182 ✓
     hdr_tbl = Table([[
         [
-            Paragraph("Znacka servis s. r. o.", sHCo),
+            Paragraph("Značka servis s. r. o.", sHCo),
             Spacer(1, 1.5*mm),
-            Paragraph("Velka Okruzna 17, 01001 Zilina  ·  ICO: 57359202", sHTg),
-            Paragraph("DIC: 2122685136  ·  IC DPH: SK2122685136", sHTg),
+            Paragraph("Veľká Okružná 17, 01001 Žilina  ·  IČO: 57359202", sHTg),
+            Paragraph("DIČ: 2122685136  ·  IČ DPH: SK2122685136", sHTg),
         ],
         [
-            Paragraph("FAKTURA", sHLb),
+            Paragraph("FAKTÚRA", sHLb),
             Spacer(1, 1*mm),
-            Paragraph(f"c. {invoice.invoice_number}", sHNm),
+            Paragraph(f"č. {invoice.invoice_number}", sHNm),
         ],
     ]], colWidths=[110*mm, 72*mm])
     hdr_tbl.setStyle(TableStyle([
@@ -125,26 +125,26 @@ def generate_invoice_pdf(invoice):
     # ── 2. ADDRESS CARDS ──────────────────────────────────────
     # [91, 91] = 182 ✓
     sup_cell = [
-        Paragraph("DODAVATEL", sALb),
+        Paragraph("DODÁVATEĽ", sALb),
         Spacer(1, 1.5*mm),
-        Paragraph("Znacka servis s. r. o.", sAFm),
-        Paragraph("Velka Okruzna 17, 01001 Zilina", sALn),
+        Paragraph("Značka servis s. r. o.", sAFm),
+        Paragraph("Veľká Okružná 17, 01001 Žilina", sALn),
         Paragraph("Slovensko", sALn),
         Spacer(1, 2*mm),
-        Paragraph("ICO: 57359202  ·  DIC: 2122685136", sALn),
-        Paragraph("IC DPH: SK2122685136", sALn),
-        Paragraph("OR OS Zilina, Sro, vl. c. 89577/L", sAReg),
+        Paragraph("IČO: 57359202  ·  DIČ: 2122685136", sALn),
+        Paragraph("IČ DPH: SK2122685136", sALn),
+        Paragraph("OR OS Žilina, s.r.o., vl.č. 89577/L", sAReg),
     ]
     cust_cell = [
-        Paragraph("ODBERATEL", sALb),
+        Paragraph("ODBERATEĽ", sALb),
         Spacer(1, 1.5*mm),
         Paragraph(pn, sAFm),
         Paragraph(padr, sALn),
         Spacer(1, 2*mm),
     ]
-    if pi:  cust_cell.append(Paragraph(f"ICO: {pi}", sALn))
-    if pd:  cust_cell.append(Paragraph(f"DIC: {pd}", sALn))
-    if pid: cust_cell.append(Paragraph(f"IC DPH: {pid}", sALn))
+    if pi:  cust_cell.append(Paragraph(f"IČO: {pi}", sALn))
+    if pd:  cust_cell.append(Paragraph(f"DIČ: {pd}", sALn))
+    if pid: cust_cell.append(Paragraph(f"IČ DPH: {pid}", sALn))
     for lbl, val in [("Kontakt", invoice.contact_person),
                      ("E-mail",  invoice.contact_email),
                      ("Tel.",    invoice.contact_phone)]:
@@ -175,11 +175,11 @@ def generate_invoice_pdf(invoice):
         return [Paragraph(label, sMlb), Paragraph(str(val), sMvl)]
 
     meta_tbl = Table([[
-        mc("Datum vystavenia",   invoice.created_at.strftime('%d.%m.%Y')),
-        mc("Datum splatnosti",   invoice.due_date.strftime('%d.%m.%Y')),
-        mc("Datum dodania",      ds),
-        mc("Variabilny symbol",  invoice.invoice_number),
-        mc("Cislo obj. / zakazky",
+        mc("Dátum vystavenia",   invoice.created_at.strftime('%d.%m.%Y')),
+        mc("Dátum splatnosti",   invoice.due_date.strftime('%d.%m.%Y')),
+        mc("Dátum dodania",      ds),
+        mc("Variabilný symbol",  invoice.invoice_number),
+        mc("Číslo obj. / zákazky",
            f"{invoice.customer_order_number or '—'} / {invoice.job_number or '—'}"),
     ]], colWidths=[36.4*mm] * 5)
     meta_tbl.setStyle(TableStyle([
@@ -202,7 +202,7 @@ def generate_invoice_pdf(invoice):
 
     rows = [[
         Paragraph("C.",       sTH),
-        Paragraph("Nazov / popis tovaru alebo sluzby", sTH),
+        Paragraph("Názov / popis tovaru alebo služby", sTH),
         Paragraph("Mn.",      sTHR),
         Paragraph("J. cena",  sTHR),
         Paragraph("DPH",      sTHR),
@@ -239,7 +239,7 @@ def generate_invoice_pdf(invoice):
     elements.append(Spacer(1, 5*mm))
 
     if invoice.customer_note:
-        elements.append(Paragraph(f"Poznamka: {invoice.customer_note}", sMut))
+        elements.append(Paragraph(f"Poznámka: {invoice.customer_note}", sMut))
         elements.append(Spacer(1, 4*mm))
 
     # ── 5. BOTTOM: PAYMENT BOX (ľavá) + SÚČTY (pravá) ─────────
@@ -263,10 +263,10 @@ def generate_invoice_pdf(invoice):
 
     # Platobné info — ako zoznam paragrafov v bunke (70mm)
     pay_cell = [
-        Paragraph("Sposob ukrady", sPLb),
-        Paragraph(invoice.payment_method or 'Bankovy prevod', sPVl),
+        Paragraph("Spôsob úhrady", sPLb),
+        Paragraph(invoice.payment_method or 'Bankový prevod', sPVl),
         Spacer(1, 2*mm),
-        Paragraph("Variabilny symbol", sPLb),
+        Paragraph("Variabilný symbol", sPLb),
         Paragraph(vs, sPVl),
         Spacer(1, 2*mm),
         Paragraph("IBAN", sPLb),
@@ -293,14 +293,14 @@ def generate_invoice_pdf(invoice):
     # Tabuľka súčtov: [44, 30] = 74mm ✓
     if invoice.is_vat_payer and vat_rate > 0:
         tot_rows = [
-            [Paragraph(f"Zaklad DPH ({vat_rate} %)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
+            [Paragraph(f"Základ DPH ({vat_rate} %)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
             [Paragraph(f"DPH ({vat_rate} %)",         sTlb), Paragraph(f"{vat:.2f} €", sTvl)],
-            [Paragraph("SUMA NA UHRADU",               sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
+            [Paragraph("SUMA NA ÚHRADU",               sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
         ]
     else:
         tot_rows = [
             [Paragraph("Bez DPH (§ 4 ZDPH)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
-            [Paragraph("SUMA NA UHRADU",      sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
+            [Paragraph("SUMA NA ÚHRADU",      sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
         ]
 
     tbl_tot = Table(tot_rows, colWidths=[44*mm, 30*mm])
@@ -330,11 +330,11 @@ def generate_invoice_pdf(invoice):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     elements.append(bottom)
-    elements.append(Spacer(1, 10*mm))
+    elements.append(Spacer(1, 20*mm))
 
-    # Podpis
+    # Podpis — vpravo (stĺpec 2)
     sig_tbl = Table(
-        [[Paragraph("_" * 38, sSig), "", ""]],
+        [["", "", [Paragraph("_" * 32, sSig), Spacer(1, 1.5*mm), Paragraph("Pečiatka a podpis", sSig)]]],
         colWidths=[100*mm, 8*mm, 74*mm]
     )
     sig_tbl.setStyle(TableStyle([
@@ -344,7 +344,6 @@ def generate_invoice_pdf(invoice):
         ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
     ]))
     elements.append(sig_tbl)
-    elements.append(Paragraph("Peciatka a podpis", sSig))
 
     doc.build(elements)
 
