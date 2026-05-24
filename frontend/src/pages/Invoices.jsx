@@ -17,11 +17,16 @@ function EmailModal({ invoice, onClose }) {
   const handleSend = async () => {
     if (!email) return;
     setLoading(true);
+    setResult('');
     try {
-      await api.post(`/invoices/${invoice.id}/send_email/`, { email });
+      await api.post(`/invoices/${invoice.id}/send_email/`, { email }, { timeout: 30000 });
       setResult('success');
     } catch (err) {
-      setResult(err.response?.data?.error || 'Chyba pri odosielaní');
+      if (err.code === 'ECONNABORTED') {
+        setResult('Timeout — server neodpovedal. Skontroluj SMTP nastavenia.');
+      } else {
+        setResult(err.response?.data?.error || 'Chyba pri odosielaní e-mailu');
+      }
     } finally {
       setLoading(false);
     }
@@ -79,6 +84,7 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [emailTarget, setEmailTarget] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
     api.get('/invoices/')
@@ -86,12 +92,33 @@ export default function Invoices() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleDownload = (id, number) => {
-    const url = `/api/invoices/${id}/download_pdf/`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `faktura_${number}.pdf`;
-    a.click();
+  const handleDownload = async (id, number) => {
+    try {
+      const res = await api.get(`/invoices/${id}/download_pdf/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `faktura_${number}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      alert('Chyba pri sťahovaní PDF');
+    }
+  };
+
+  const handlePreview = async (inv) => {
+    try {
+      const res = await api.get(`/invoices/${inv.id}/download_pdf/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      setPreviewUrl(url);
+    } catch {
+      alert('Chyba pri načítaní náhľadu');
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   if (loading) {
@@ -164,6 +191,13 @@ export default function Invoices() {
                           ✏ Upraviť
                         </button>
                         <button
+                          onClick={() => handlePreview(inv)}
+                          className="btn-secondary text-xs"
+                          title="Náhľad faktúry"
+                        >
+                          👁 Náhľad
+                        </button>
+                        <button
                           onClick={() => handleDownload(inv.id, inv.invoice_number)}
                           className="btn-secondary text-xs"
                           title="Stiahnuť PDF"
@@ -189,6 +223,25 @@ export default function Invoices() {
 
       {emailTarget && (
         <EmailModal invoice={emailTarget} onClose={() => setEmailTarget(null)} />
+      )}
+
+      {previewUrl && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-900">
+            <span className="text-white text-sm font-medium">Náhľad faktúry</span>
+            <button
+              onClick={closePreview}
+              className="text-white hover:text-gray-300 text-2xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+          <iframe
+            src={previewUrl}
+            className="flex-1 w-full border-0"
+            title="Náhľad faktúry"
+          />
+        </div>
       )}
     </div>
   );
