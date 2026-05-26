@@ -12,6 +12,7 @@ from .models import Item, StockMovement, Invoice, InvoiceItem, Partner, Quotatio
 from .serializers import ItemSerializer, InvoiceSerializer, PartnerSerializer, QuotationSerializer, DeliveryNoteSerializer, ProjectSerializer, RentalItemSerializer, RentalMovementSerializer, BOMItemSerializer, OrderNeedSerializer, OrderNeedProjectSerializer, StockDeliverySerializer, StockDeliveryItemSerializer, SentOrderSerializer, SentOrderItemSerializer, SentOrderAttachmentSerializer
 from .invoice_pdf import generate_invoice_pdf
 from .delivery_note_pdf import generate_delivery_note_pdf
+from .quotation_pdf import generate_quotation_pdf
 
 
 class ItemViewSet(viewsets.ModelViewSet):
@@ -918,6 +919,30 @@ class QuotationViewSet(viewsets.ModelViewSet):
             "quotation_id": quotation.id,
             "new_status": quotation.status
         })
+
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        quotation = self.get_object()
+        return generate_quotation_pdf(quotation)
+
+    @action(detail=True, methods=['post'])
+    def send_email(self, request, pk=None):
+        quotation = self.get_object()
+        recipient_email = request.data.get('email')
+        if not recipient_email:
+            return Response({'error': 'Nebol zadaný e-mail príjemcu'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            response = generate_quotation_pdf(quotation)
+            pdf_data = response.content
+            subject = f"Cenová ponuka č. {quotation.quotation_number} - Značka servis s. r. o."
+            body = f"Dobrý deň,\n\nV prílohe Vám zasielame cenovú ponuku č. {quotation.quotation_number}.\n\nS pozdravom,\nZnačka servis s. r. o."
+            email_msg = EmailMessage(subject=subject, body=body, to=[recipient_email],
+                                     bcc=['obchod@znackaservis.sk'])
+            email_msg.attach(f"ponuka_{quotation.quotation_number}.pdf", pdf_data, "application/pdf")
+            email_msg.send(fail_silently=False)
+            return Response({'status': 'E-mail bol úspešne odoslaný'})
+        except Exception as e:
+            return Response({'error': f'Chyba pri odosielaní: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PartnerViewSet(viewsets.ModelViewSet):

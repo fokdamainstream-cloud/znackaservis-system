@@ -84,11 +84,69 @@ function ConvertModal({ quotation, onClose, onSuccess }) {
   );
 }
 
+function EmailModal({ quotation, onClose }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState('');
+
+  const handleSend = async () => {
+    if (!email) return;
+    setLoading(true);
+    setResult('');
+    try {
+      await api.post(`/quotations/${quotation.id}/send_email/`, { email }, { timeout: 30000 });
+      setResult('success');
+    } catch (err) {
+      setResult(err.code === 'ECONNABORTED'
+        ? 'Timeout — server neodpovedal'
+        : err.response?.data?.error || 'Chyba pri odosielaní');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (result === 'success') {
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 text-center">
+          <div className="text-4xl mb-3">✓</div>
+          <h3 className="font-semibold text-green-700 mb-1">E-mail odoslaný</h3>
+          <p className="text-sm text-gray-500 mb-4">Ponuka odoslaná na {email}</p>
+          <button onClick={onClose} className="btn-primary">Zavrieť</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 className="font-semibold text-gray-900 mb-1">Odoslať ponuku e-mailom</h3>
+        <p className="text-sm text-gray-500 mb-4">Ponuka: <strong>{quotation.quotation_number}</strong></p>
+        {typeof result === 'string' && result && (
+          <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded mb-3">{result}</p>
+        )}
+        <label className="label">E-mail príjemcu *</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="firma@example.sk" className="input mb-4" />
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary">Zrušiť</button>
+          <button type="button" onClick={handleSend} disabled={loading || !email} className="btn-primary">
+            {loading ? 'Odosielam…' : 'Odoslať'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Quotations() {
   const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [convertTarget, setConvertTarget] = useState(null);
+  const [emailTarget, setEmailTarget] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [toast, setToast] = useState('');
 
   const load = async () => {
@@ -123,6 +181,39 @@ export default function Quotations() {
     setConvertTarget(null);
     showToast(`Faktúra ${invoiceNumber} bola úspešne vytvorená!`);
     load();
+  };
+
+  const handleDownload = async (q) => {
+    try {
+      const res = await api.get(`/quotations/${q.id}/download_pdf/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ponuka_${q.quotation_number}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch { showToast('Chyba pri sťahovaní PDF'); }
+  };
+
+  const handlePreview = async (q) => {
+    try {
+      const res = await api.get(`/quotations/${q.id}/download_pdf/`, { responseType: 'blob' });
+      setPreviewUrl(URL.createObjectURL(res.data));
+    } catch { showToast('Chyba pri načítaní náhľadu'); }
+  };
+
+  const handlePrint = async (q) => {
+    try {
+      const res = await api.get(`/quotations/${q.id}/download_pdf/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const win = window.open(url);
+      win.onload = () => { win.print(); setTimeout(() => URL.revokeObjectURL(url), 10000); };
+    } catch { showToast('Chyba pri tlači'); }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   if (loading) {
@@ -202,26 +293,14 @@ export default function Quotations() {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/quotations/${q.id}/edit`)}
-                          className="btn-secondary text-xs"
-                          title="Upraviť"
-                        >
-                          ✏ Upraviť
-                        </button>
+                      <div className="flex justify-end gap-1 flex-wrap">
+                        <button onClick={() => handlePreview(q)} className="btn-secondary text-xs" title="Náhľad">👁 Náhľad</button>
+                        <button onClick={() => handleDownload(q)} className="btn-secondary text-xs" title="Stiahnuť PDF">↓ PDF</button>
+                        <button onClick={() => handlePrint(q)} className="btn-secondary text-xs" title="Tlačiť">🖨 Tlač</button>
+                        <button onClick={() => setEmailTarget(q)} className="btn-secondary text-xs" title="E-mail">✉ E-mail</button>
+                        <button onClick={() => navigate(`/quotations/${q.id}/edit`)} className="btn-secondary text-xs" title="Upraviť">✏ Upraviť</button>
                         {q.status !== 'converted' && q.status !== 'rejected' && (
-                          <button
-                            onClick={() => setConvertTarget(q)}
-                            className="btn-success text-xs"
-                          >
-                            → Faktúra
-                          </button>
-                        )}
-                        {q.status === 'converted' && q.converted_to_invoice && (
-                          <span className="text-xs text-purple-600 font-medium">
-                            Konvertovaná
-                          </span>
+                          <button onClick={() => setConvertTarget(q)} className="btn-success text-xs">→ Faktúra</button>
                         )}
                       </div>
                     </td>
@@ -239,6 +318,20 @@ export default function Quotations() {
           onClose={() => setConvertTarget(null)}
           onSuccess={handleConvertSuccess}
         />
+      )}
+
+      {emailTarget && (
+        <EmailModal quotation={emailTarget} onClose={() => setEmailTarget(null)} />
+      )}
+
+      {previewUrl && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-900">
+            <span className="text-white text-sm font-medium">Náhľad cenovej ponuky</span>
+            <button onClick={closePreview} className="text-white hover:text-gray-300 text-2xl leading-none">×</button>
+          </div>
+          <iframe src={previewUrl} className="flex-1 w-full border-0" title="Náhľad ponuky" />
+        </div>
       )}
     </div>
   );
