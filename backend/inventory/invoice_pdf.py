@@ -299,7 +299,7 @@ def generate_invoice_pdf(invoice):
         ]
     else:
         tot_rows = [
-            [Paragraph("Bez DPH (§ 4 ZDPH)", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
+            [Paragraph("Základ bez DPH", sTlb), Paragraph(f"{sub:.2f} €", sTvl)],
             [Paragraph("SUMA NA ÚHRADU",      sTLB), Paragraph(f"{tot:.2f} €", sTVB)],
         ]
 
@@ -323,7 +323,7 @@ def generate_invoice_pdf(invoice):
     # Bottom row [100, 8, 74] = 182mm ✓
     bottom = Table([[pay_box, "", tbl_tot]], colWidths=[100*mm, 8*mm, 74*mm])
     bottom.setStyle(TableStyle([
-        ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING',   (0, 0), (-1, -1), 0),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
         ('TOPPADDING',    (0, 0), (-1, -1), 0),
