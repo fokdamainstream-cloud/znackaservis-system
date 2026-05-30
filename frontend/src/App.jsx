@@ -55,8 +55,7 @@ const NAV_SECTIONS = [
   {
     title: 'ADRESÁR',
     items: [
-      { to: '/partners', label: 'Dodávatelia', Icon: Users,    end: true },
-      { to: '/partners', label: 'Partneri',    Icon: Contact,  end: true },
+      { to: '/partners', label: 'Partneri / Dodávatelia', Icon: Users, end: true },
     ],
   },
 ];
