@@ -125,7 +125,7 @@ function ItemModal({ item, onClose, onSave }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Priemerná nákupná cena (€)</label>
+              <label className="label">Nákupná cena (€)</label>
               <input
                 type="number"
                 min="0"
@@ -230,7 +230,7 @@ export default function Items() {
                   <th className="px-4 py-3 text-left font-medium">Popis</th>
                   <th className="px-4 py-3 text-right font-medium">Na sklade</th>
                   {isOwner && <th className="px-4 py-3 text-right font-medium">Predajná cena</th>}
-                  {isOwner && <th className="px-4 py-3 text-right font-medium">Nák. cena</th>}
+                  {isOwner && <th className="px-4 py-3 text-right font-medium">Nákupná cena</th>}
                   {isOwner && <th className="px-4 py-3 text-right font-medium">Marža</th>}
                   <th className="px-4 py-3 text-right font-medium">Akcie</th>
                 </tr>
