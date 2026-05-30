@@ -24,6 +24,7 @@ const emptyRow = (pos, defaultVat = 23) => ({
   vat_rate: defaultVat,
   _stockQty: null,
   _priceHistory: [],
+  _avgPurchasePrice: 0,
 });
 
 // Jednoduchá rozbaľovacia sekcia
@@ -263,11 +264,20 @@ export default function InvoiceForm() {
   const summary = useMemo(() => {
     let subtotalItems = 0;
     let vatTotal = 0;
+    let profitTotal = 0;
+    let profitItemCount = 0;
     for (const row of items) {
-      const lineBase = parseFloat(row.quantity || 0) * parseFloat(row.unit_price || 0);
+      const qty = parseFloat(row.quantity || 0);
+      const sell = parseFloat(row.unit_price || 0);
+      const lineBase = qty * sell;
       subtotalItems += lineBase;
       if (isVatPayer) {
         vatTotal += lineBase * ((parseFloat(row.vat_rate) || 0) / 100);
+      }
+      const buy = parseFloat(row._avgPurchasePrice || 0);
+      if (buy > 0) {
+        profitTotal += (sell - buy) * qty;
+        profitItemCount++;
       }
     }
     const dp = parseFloat(discountPercent) || 0;
@@ -276,7 +286,12 @@ export default function InvoiceForm() {
     const discountRatio = subtotalItems > 0 ? invoiceDiscount / subtotalItems : 0;
     const vatAfterDiscount = vatTotal * (1 - discountRatio);
     const afterDiscount = subtotalItems - invoiceDiscount;
-    return { subtotalItems, invoiceDiscount, afterDiscount, vat: vatAfterDiscount, total: afterDiscount + vatAfterDiscount };
+    const profitAfterDiscount = profitTotal * (1 - discountRatio);
+    return {
+      subtotalItems, invoiceDiscount, afterDiscount,
+      vat: vatAfterDiscount, total: afterDiscount + vatAfterDiscount,
+      profitTotal: profitAfterDiscount, profitItemCount,
+    };
   }, [items, discountPercent, discountAmount, isVatPayer]);
 
   const handleSubmit = async (e) => {
@@ -610,6 +625,12 @@ export default function InvoiceForm() {
               <span>Celkom</span>
               <span className="text-blue-700">{fmt(summary.total)} €</span>
             </div>
+            {summary.profitItemCount > 0 && (
+              <div className={`flex justify-between border-t border-dashed border-gray-200 pt-2 text-sm font-semibold ${summary.profitTotal >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <span>Odh. zisk (bez DPH)</span>
+                <span>{summary.profitTotal >= 0 ? '+' : ''}{fmt(summary.profitTotal)} €</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

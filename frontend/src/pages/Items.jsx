@@ -4,6 +4,13 @@ import { useUser } from '../context/UserContext';
 
 const fmt = (n) => (isNaN(parseFloat(n)) ? '—' : `${parseFloat(n).toFixed(2)} €`);
 
+const calcMargin = (sellPrice, buyPrice) => {
+  const s = parseFloat(sellPrice);
+  const b = parseFloat(buyPrice);
+  if (!b || !s || s <= 0) return null;
+  return ((s - b) / s) * 100;
+};
+
 function ItemModal({ item, onClose, onSave }) {
   const isNew = !item?.id;
   const [form, setForm] = useState({
@@ -12,6 +19,7 @@ function ItemModal({ item, onClose, onSave }) {
     description: item?.description || '',
     quantity: item?.quantity ?? 0,
     unit_price: item?.unit_price ?? '',
+    avg_purchase_price: item?.avg_purchase_price ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +41,7 @@ function ItemModal({ item, onClose, onSave }) {
         description: form.description,
         quantity: parseFloat(form.quantity) || 0,
         unit_price: parseFloat(form.unit_price),
+        avg_purchase_price: parseFloat(form.avg_purchase_price) || 0,
       };
       if (isNew) {
         await api.post('/items/', payload);
@@ -102,7 +111,7 @@ function ItemModal({ item, onClose, onSave }) {
               />
             </div>
             <div>
-              <label className="label">Cena bez DPH (€) *</label>
+              <label className="label">Predajná cena bez DPH (€) *</label>
               <input
                 type="number"
                 min="0"
@@ -112,6 +121,28 @@ function ItemModal({ item, onClose, onSave }) {
                 className="input text-right"
                 placeholder="0.00"
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Priemerná nákupná cena (€)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.avg_purchase_price}
+                onChange={(e) => set('avg_purchase_price', e.target.value)}
+                className="input text-right"
+                placeholder="0.00"
+              />
+            </div>
+            <div className="flex items-end pb-1">
+              {(() => {
+                const m = calcMargin(form.unit_price, form.avg_purchase_price);
+                if (m === null) return <span className="text-xs text-gray-400">Marža: —</span>;
+                const cls = m >= 20 ? 'text-green-600' : m >= 5 ? 'text-amber-600' : 'text-red-600';
+                return <span className={`text-sm font-semibold ${cls}`}>Marža: {m.toFixed(1)} %</span>;
+              })()}
             </div>
           </div>
         </div>
@@ -198,7 +229,9 @@ export default function Items() {
                   <th className="px-4 py-3 text-left font-medium">Názov</th>
                   <th className="px-4 py-3 text-left font-medium">Popis</th>
                   <th className="px-4 py-3 text-right font-medium">Na sklade</th>
-                  {isOwner && <th className="px-4 py-3 text-right font-medium">Cena bez DPH</th>}
+                  {isOwner && <th className="px-4 py-3 text-right font-medium">Predajná cena</th>}
+                  {isOwner && <th className="px-4 py-3 text-right font-medium">Nák. cena</th>}
+                  {isOwner && <th className="px-4 py-3 text-right font-medium">Marža</th>}
                   <th className="px-4 py-3 text-right font-medium">Akcie</th>
                 </tr>
               </thead>
@@ -227,6 +260,20 @@ export default function Items() {
                         {fmt(item.unit_price)}
                       </td>
                     )}
+                    {isOwner && (
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {parseFloat(item.avg_purchase_price) > 0 ? fmt(item.avg_purchase_price) : <span className="text-gray-300">—</span>}
+                      </td>
+                    )}
+                    {isOwner && (() => {
+                      const m = calcMargin(item.unit_price, item.avg_purchase_price);
+                      const cls = m === null ? '' : m >= 20 ? 'text-green-600 font-semibold' : m >= 5 ? 'text-amber-600 font-semibold' : 'text-red-600 font-semibold';
+                      return (
+                        <td className={`px-4 py-3 text-right ${cls}`}>
+                          {m === null ? <span className="text-gray-300">—</span> : `${m.toFixed(1)} %`}
+                        </td>
+                      );
+                    })()}
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => openEdit(item)}

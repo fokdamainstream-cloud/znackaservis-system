@@ -43,7 +43,6 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
   const subtotal = parseFloat(row.quantity || 0) * parseFloat(row.unit_price || 0);
 
   const handleSelectStock = (item) => {
-    // Input musí zobrazovať NÁZOV položky, nie SKU
     setNameInput(item.name);
     setShowDropdown(false);
     const history = priceHistory[item.id] || [];
@@ -54,6 +53,7 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
       unit_price: item.unit_price,
       _stockQty: item.quantity,
       _priceHistory: history,
+      _avgPurchasePrice: parseFloat(item.avg_purchase_price) || 0,
     });
   };
 
@@ -99,17 +99,27 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
               }}
               className="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-xs"
             >
-              {filtered.map((s) => (
-                <li
-                  key={s.id}
-                  className="px-2 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
-                  onMouseDown={() => handleSelectStock(s)}
-                >
-                  {s.sku && <span className="text-gray-400 mr-1.5 font-mono">[{s.sku}]</span>}
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-gray-400 ml-2">{s.unit_price} € · Na sklade: {s.quantity}</span>
-                </li>
-              ))}
+              {filtered.map((s) => {
+                const buy = parseFloat(s.avg_purchase_price);
+                const sell = parseFloat(s.unit_price);
+                const margin = buy > 0 && sell > 0 ? ((sell - buy) / sell * 100) : null;
+                return (
+                  <li
+                    key={s.id}
+                    className="px-2 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    onMouseDown={() => handleSelectStock(s)}
+                  >
+                    {s.sku && <span className="text-gray-400 mr-1.5 font-mono">[{s.sku}]</span>}
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-gray-400 ml-2">{s.unit_price} € · Na sklade: {s.quantity}</span>
+                    {margin !== null && (
+                      <span className={`ml-2 font-semibold ${margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600'}`}>
+                        · {margin.toFixed(0)} %
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -128,6 +138,20 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
             ))}
           </div>
         )}
+        {row._avgPurchasePrice > 0 && (() => {
+          const buy = row._avgPurchasePrice;
+          const sell = parseFloat(row.unit_price || 0);
+          const qty = parseFloat(row.quantity || 0);
+          if (!sell) return null;
+          const margin = ((sell - buy) / sell) * 100;
+          const profit = (sell - buy) * qty;
+          const cls = margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600';
+          return (
+            <div className={`mt-0.5 text-xs ${cls}`}>
+              Marža: {margin.toFixed(1)} % · Zisk: {fmt(profit)} €
+            </div>
+          );
+        })()}
       </td>
 
       {/* Množstvo */}
