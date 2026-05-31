@@ -20,6 +20,7 @@ function ItemModal({ item, onClose, onSave }) {
     quantity: item?.quantity ?? 0,
     unit_price: item?.unit_price ?? '',
     avg_purchase_price: item?.avg_purchase_price ?? '',
+    recommended_price: item?.recommended_price ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -42,6 +43,7 @@ function ItemModal({ item, onClose, onSave }) {
         quantity: parseFloat(form.quantity) || 0,
         unit_price: parseFloat(form.unit_price),
         avg_purchase_price: parseFloat(form.avg_purchase_price) || 0,
+        recommended_price: parseFloat(form.recommended_price) || 0,
       };
       if (isNew) {
         await api.post('/items/', payload);
@@ -136,14 +138,32 @@ function ItemModal({ item, onClose, onSave }) {
                 placeholder="0.00"
               />
             </div>
-            <div className="flex items-end pb-1">
-              {(() => {
-                const m = calcMargin(form.unit_price, form.avg_purchase_price);
-                if (m === null) return <span className="text-xs text-gray-400">Marža: —</span>;
-                const cls = m >= 20 ? 'text-green-600' : m >= 5 ? 'text-amber-600' : 'text-red-600';
-                return <span className={`text-sm font-semibold ${cls}`}>Marža: {m.toFixed(1)} %</span>;
-              })()}
+            <div>
+              <label className="label">Doporučená cena dod. (€)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.recommended_price}
+                onChange={(e) => set('recommended_price', e.target.value)}
+                className="input text-right"
+                placeholder="0.00"
+              />
             </div>
+          </div>
+          <div className="flex items-center gap-4 px-1">
+            {(() => {
+              const m = calcMargin(form.unit_price, form.avg_purchase_price);
+              if (m === null) return <span className="text-xs text-gray-400">Marža (predajná): —</span>;
+              const cls = m >= 20 ? 'text-green-600' : m >= 5 ? 'text-amber-600' : 'text-red-600';
+              return <span className={`text-sm font-semibold ${cls}`}>Marža: {m.toFixed(1)} %</span>;
+            })()}
+            {parseFloat(form.recommended_price) > 0 && parseFloat(form.avg_purchase_price) > 0 && (() => {
+              const m = calcMargin(form.recommended_price, form.avg_purchase_price);
+              if (m === null) return null;
+              const cls = m >= 20 ? 'text-green-600' : m >= 5 ? 'text-amber-600' : 'text-red-600';
+              return <span className={`text-xs ${cls}`}>(dod. cena: {m.toFixed(1)} %)</span>;
+            })()}
           </div>
         </div>
         <div className="flex gap-2 justify-end mt-5">

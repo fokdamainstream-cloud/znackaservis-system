@@ -48,6 +48,8 @@ const emptyRow = (pos, defaultVat = 0) => ({
   vat_rate: defaultVat,
   _stockQty: null,
   _priceHistory: [],
+  _avgPurchasePrice: 0,
+  _recommendedPrice: 0,
 });
 
 export default function QuotationForm() {
@@ -174,14 +176,23 @@ export default function QuotationForm() {
   const summary = useMemo(() => {
     let subtotal = 0;
     let vatTotal = 0;
+    let profitTotal = 0;
+    let profitItemCount = 0;
     for (const row of items) {
-      const lineBase = parseFloat(row.quantity || 0) * parseFloat(row.unit_price || 0);
+      const qty = parseFloat(row.quantity || 0);
+      const sell = parseFloat(row.unit_price || 0);
+      const lineBase = qty * sell;
       subtotal += lineBase;
       if (isVatPayer) {
         vatTotal += lineBase * ((parseFloat(row.vat_rate) || 0) / 100);
       }
+      const buy = parseFloat(row._avgPurchasePrice || 0);
+      if (buy > 0) {
+        profitTotal += (sell - buy) * qty;
+        profitItemCount++;
+      }
     }
-    return { subtotal, vat: vatTotal, total: subtotal + vatTotal };
+    return { subtotal, vat: vatTotal, total: subtotal + vatTotal, profitTotal, profitItemCount };
   }, [items, isVatPayer]);
 
   const handleSubmit = async (e) => {
@@ -491,6 +502,12 @@ export default function QuotationForm() {
               <span>Celkom</span>
               <span className="text-blue-700">{fmt(summary.total)} €</span>
             </div>
+            {summary.profitItemCount > 0 && (
+              <div className={`flex justify-between border-t border-dashed border-gray-200 pt-2 text-sm font-semibold ${summary.profitTotal >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <span>Odh. zisk (bez DPH)</span>
+                <span>{summary.profitTotal >= 0 ? '+' : ''}{fmt(summary.profitTotal)} €</span>
+              </div>
+            )}
             {!isVatPayer && (
               <p className="text-xs text-amber-600 mt-1">Ceny sú uvedené bez DPH</p>
             )}

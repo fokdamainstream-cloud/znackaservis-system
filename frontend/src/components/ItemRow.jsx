@@ -54,6 +54,7 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
       _stockQty: item.quantity,
       _priceHistory: history,
       _avgPurchasePrice: parseFloat(item.avg_purchase_price) || 0,
+      _recommendedPrice: parseFloat(item.recommended_price) || 0,
     });
   };
 
@@ -102,21 +103,26 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
               {filtered.map((s) => {
                 const buy = parseFloat(s.avg_purchase_price);
                 const sell = parseFloat(s.unit_price);
+                const rec = parseFloat(s.recommended_price);
                 const margin = buy > 0 && sell > 0 ? ((sell - buy) / sell * 100) : null;
                 return (
                   <li
                     key={s.id}
-                    className="px-2 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    className="px-2 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
                     onMouseDown={() => handleSelectStock(s)}
                   >
-                    {s.sku && <span className="text-gray-400 mr-1.5 font-mono">[{s.sku}]</span>}
-                    <span className="font-medium">{s.name}</span>
-                    <span className="text-gray-400 ml-2">{s.unit_price} € · Na sklade: {s.quantity}</span>
-                    {margin !== null && (
-                      <span className={`ml-2 font-semibold ${margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600'}`}>
-                        · {margin.toFixed(0)} %
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {s.sku && <span className="text-gray-400 font-mono">[{s.sku}]</span>}
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-gray-400">· Predaj: {sell.toFixed(2)} €</span>
+                      {rec > 0 && <span className="text-blue-500">· Dod.: {rec.toFixed(2)} €</span>}
+                      <span className="text-gray-400">· Sklad: {s.quantity}</span>
+                      {margin !== null && (
+                        <span className={`font-semibold ${margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600'}`}>
+                          · {margin.toFixed(0)} %
+                        </span>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -138,17 +144,30 @@ export default function ItemRow({ row, index, stockItems, priceHistory, onChange
             ))}
           </div>
         )}
-        {row._avgPurchasePrice > 0 && (() => {
-          const buy = row._avgPurchasePrice;
+        {(row._avgPurchasePrice > 0 || row._recommendedPrice > 0) && (() => {
+          const buy = row._avgPurchasePrice || 0;
           const sell = parseFloat(row.unit_price || 0);
+          const rec = row._recommendedPrice || 0;
           const qty = parseFloat(row.quantity || 0);
-          if (!sell) return null;
-          const margin = ((sell - buy) / sell) * 100;
-          const profit = (sell - buy) * qty;
-          const cls = margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600';
+          const margin = buy > 0 && sell > 0 ? ((sell - buy) / sell) * 100 : null;
+          const profit = buy > 0 && sell > 0 ? (sell - buy) * qty : null;
+          const cls = margin === null ? '' : margin >= 20 ? 'text-green-600' : margin >= 5 ? 'text-amber-600' : 'text-red-600';
           return (
-            <div className={`mt-0.5 text-xs ${cls}`}>
-              Marža: {margin.toFixed(1)} % · Zisk: {fmt(profit)} €
+            <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+              {margin !== null && (
+                <span className={`text-xs font-semibold ${cls}`}>
+                  Marža: {margin.toFixed(1)} % · Zisk: {fmt(profit)} €
+                </span>
+              )}
+              {rec > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onChange(index, { unit_price: rec })}
+                  className="text-xs px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200"
+                >
+                  Použi dod. cenu ({fmt(rec)} €)
+                </button>
+              )}
             </div>
           );
         })()}

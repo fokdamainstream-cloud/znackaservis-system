@@ -10,6 +10,7 @@ class Item(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     avg_purchase_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    recommended_price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Doporučená cena dodávateľa")
     sign_code = models.CharField(max_length=20, blank=True, verbose_name="Kód TP117 (napr. 506)")
     sign_name_sk = models.CharField(max_length=255, blank=True, verbose_name="Slovenský názov/skratka")
     dimensions = models.CharField(max_length=100, blank=True, verbose_name="Rozmery (napr. 600x600)")
